@@ -40,32 +40,32 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-neutral-50 to-neutral-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="fixed inset-0 z-[100] bg-gradient-to-br from-primary-50 via-background to-secondary-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 overflow-y-auto">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-6">
-            <div className="w-12 h-12 bg-gradient-to-r from-primary-600 to-secondary-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-lg">D2B</span>
+            <div className="w-16 h-16 gradient-bg-primary rounded-2xl flex items-center justify-center shadow-medium">
+              <span className="text-white font-bold text-xl">D2B</span>
             </div>
           </div>
-          <h2 className="text-3xl font-display font-bold text-neutral-900">
+          <h2 className="text-3xl font-display font-bold text-foreground">
             Welcome back
           </h2>
-          <p className="mt-2 text-sm text-neutral-600">
+          <p className="mt-2 text-sm text-foreground-secondary">
             Sign in to your Design2Build.Pro account
           </p>
         </div>
 
-        <div className="card">
+        <div className="card-elevated">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div className="bg-error-50 border border-error-200 text-error-700 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-neutral-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
                 Email address
               </label>
               <input
@@ -82,7 +82,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-neutral-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
                 Password
               </label>
               <input
@@ -106,7 +106,7 @@ export default function LoginPage() {
                   type="checkbox"
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded"
                 />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-neutral-700">
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-foreground-secondary">
                   Remember me
                 </label>
               </div>
@@ -132,10 +132,10 @@ export default function LoginPage() {
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-neutral-300" />
+                <div className="w-full border-t border-border-secondary" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-neutral-500">Or continue with</span>
+                <span className="px-2 bg-surface text-foreground-tertiary">Or continue with</span>
               </div>
             </div>
 
@@ -151,9 +151,9 @@ export default function LoginPage() {
         </div>
 
         <div className="text-center">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-foreground-secondary">
             Don't have an account?{' '}
-            <Link href="/auth/register" className="text-primary-600 hover:text-primary-500 font-medium">
+            <Link href="/auth/register" className="text-primary-600 hover:text-primary-700 font-medium">
               Sign up for free
             </Link>
           </p>

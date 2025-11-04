@@ -10,7 +10,9 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "backend": "node backend/server.js",
-    "backend:dev": "nodemon backend/server.js"
+    "backend:dev": "nodemon backend/server.js",
+    "extract-figma": "node scripts/extract-figma-designs.js",
+    "analyze-designs": "node scripts/extract-figma-designs.js"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.0",

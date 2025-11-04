@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
-import { Inter, Poppins } from 'next/font/google';
+import { Inter, Poppins, Dancing_Script } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers/Providers';
-import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -14,6 +12,12 @@ const poppins = Poppins({
   subsets: ['latin'],
   weight: ['300', '400', '500', '600', '700'],
   variable: '--font-poppins',
+});
+
+const dancingScript = Dancing_Script({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-dancing-script',
 });
 
 export const metadata: Metadata = {
@@ -37,18 +41,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${poppins.variable}`}>
+    <html lang="en" className={`${inter.variable} ${poppins.variable} ${dancingScript.variable}`}>
       <body className="font-sans antialiased bg-neutral-50">
         <Providers>
-          <div className="min-h-screen flex flex-col">
-            <Header />
-            <main className="flex-1">
-              {children}
-            </main>
-            <Footer />
-          </div>
+          {/* Layout is handled by individual pages - splash/welcome/auth pages have their own layout */}
+          {children}
         </Providers>
       </body>
     </html>
   );
-} 
+}

@@ -15,6 +15,7 @@ const userRoutes = require('./routes/users');
 const aiRoutes = require('./routes/ai');
 const paymentRoutes = require('./routes/payments');
 const marketplaceRoutes = require('./routes/marketplace');
+const figmaRoutes = require('./routes/figma');
 
 // Security middleware
 app.use(helmet({
@@ -87,6 +88,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/figma', figmaRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

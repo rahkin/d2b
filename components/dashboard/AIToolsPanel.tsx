@@ -34,10 +34,10 @@ export function AIToolsPanel() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-display font-bold text-neutral-900">AI Design Tools</h1>
-          <p className="text-neutral-600">Powered by advanced AI to enhance your design workflow</p>
+          <h1 className="text-2xl font-display font-bold text-foreground">AI Design Tools</h1>
+          <p className="text-foreground-secondary">Powered by advanced AI to enhance your design workflow</p>
         </div>
-        <div className="text-sm text-neutral-500">
+        <div className="text-sm text-foreground-tertiary">
           🇵🇭 Philippine Peso • BIR Compliant
         </div>
       </div>
@@ -58,12 +58,12 @@ export function AIToolsPanel() {
               <div className="w-16 h-16 bg-gradient-to-r from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center mx-auto mb-4">
                 <span className="text-3xl">{tool.icon}</span>
               </div>
-              <h3 className="text-lg font-semibold text-neutral-900 mb-2">{tool.name}</h3>
-              <p className="text-sm text-neutral-600 mb-4">{tool.description}</p>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{tool.name}</h3>
+              <p className="text-sm text-foreground-secondary mb-4">{tool.description}</p>
               
               <ul className="space-y-2 text-left">
                 {tool.features.map((feature, index) => (
-                  <li key={index} className="flex items-center text-sm text-neutral-600">
+                  <li key={index} className="flex items-center text-sm text-foreground-secondary">
                     <div className="w-1.5 h-1.5 bg-primary-500 rounded-full mr-2" />
                     {feature}
                   </li>
@@ -77,10 +77,10 @@ export function AIToolsPanel() {
       {/* Active Tool Interface */}
       <div className="card">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-neutral-900 mb-2">
+          <h2 className="text-xl font-semibold text-foreground mb-2">
             {tools.find(t => t.id === activeTool)?.name}
           </h2>
-          <p className="text-neutral-600">
+          <p className="text-foreground-secondary">
             {tools.find(t => t.id === activeTool)?.description}
           </p>
         </div>
@@ -89,7 +89,7 @@ export function AIToolsPanel() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Project Description
                 </label>
                 <textarea
@@ -105,7 +105,7 @@ export function AIToolsPanel() {
                   {['Minimalist', 'Modern', 'Traditional', 'Industrial', 'Scandinavian', 'Tropical'].map((style) => (
                     <label key={style} className="flex items-center">
                       <input type="checkbox" className="mr-2" />
-                      <span className="text-sm text-neutral-700">{style}</span>
+                      <span className="text-sm text-foreground">{style}</span>
                     </label>
                   ))}
                 </div>
@@ -121,9 +121,9 @@ export function AIToolsPanel() {
 
         {activeTool === 'sketch-renderer' && (
           <div className="space-y-6">
-            <div className="border-2 border-dashed border-neutral-300 rounded-lg p-8 text-center">
+            <div className="border-2 border-dashed border-border-secondary rounded-lg p-8 text-center">
               <div className="text-4xl mb-4">📁</div>
-              <p className="text-neutral-600 mb-4">Upload your sketch or drag and drop here</p>
+              <p className="text-foreground-secondary mb-4">Upload your sketch or drag and drop here</p>
               <button className="btn-primary">Choose File</button>
             </div>
             

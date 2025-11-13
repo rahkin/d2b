@@ -45,9 +45,9 @@ export default function RootLayout({
       <body className="font-sans antialiased bg-neutral-50">
         <Providers>
           {/* Layout is handled by individual pages - splash/welcome/auth pages have their own layout */}
-          {children}
+              {children}
         </Providers>
       </body>
     </html>
   );
-}
+} 

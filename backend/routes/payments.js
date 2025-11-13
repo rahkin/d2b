@@ -1,356 +1,216 @@
 const express = require('express');
 const router = express.Router();
+const { Order, Payment } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
+require('dotenv').config();
+
+// Initialize payment providers (if keys are available)
+let paymongo, xendit, stripe;
+
+try {
+  if (process.env.PAYMONGO_SECRET_KEY) {
+    // PayMongo initialization would go here
+    // const { Paymongo } = require('paymongo');
+    // paymongo = new Paymongo(process.env.PAYMONGO_SECRET_KEY);
+  }
+} catch (error) {
+  console.log('PayMongo not configured');
+}
+
+try {
+  if (process.env.XENDIT_SECRET_KEY) {
+    const xenditNode = require('xendit-node');
+    xendit = new xenditNode({ secretKey: process.env.XENDit_SECRET_KEY });
+  }
+} catch (error) {
+  console.log('Xendit not configured');
+}
+
+try {
+  if (process.env.STRIPE_SECRET_KEY) {
+    stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  }
+} catch (error) {
+  console.log('Stripe not configured');
+}
 
 // Create payment intent
-router.post('/create-intent', async (req, res) => {
+router.post('/create-intent', authenticateToken, async (req, res) => {
   try {
-    const { amount, currency, projectId, paymentMethod } = req.body;
+    const { orderId, amount, currency, paymentMethod, provider } = req.body;
 
-    // Validate amount and currency for Philippine market
-    if (currency !== 'PHP' && currency !== 'USD') {
+    if (!orderId || !amount || !currency || !paymentMethod) {
       return res.status(400).json({
         success: false,
-        error: 'Only PHP and USD currencies are supported'
+        error: 'Missing required payment information'
       });
     }
 
-    if (amount < 100) {
-      return res.status(400).json({
+    const order = await Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({
         success: false,
-        error: 'Minimum payment amount is ₱100'
+        error: 'Order not found'
       });
     }
 
-    // Mock payment intent creation
-    const paymentIntent = {
-      id: `pi_${Date.now()}`,
+    // Select provider based on payment method or default
+    const selectedProvider = provider || getProviderForMethod(paymentMethod);
+
+    // Create payment intent based on provider
+    let paymentIntent;
+    
+    if (selectedProvider === 'paymongo' && paymongo) {
+      // PayMongo payment intent creation
+      // paymentIntent = await paymongo.paymentIntents.create({...});
+      paymentIntent = {
+        id: `pi_${Date.now()}`,
+        client_secret: `mock_secret_${Date.now()}`,
+        provider: 'paymongo'
+      };
+    } else if (selectedProvider === 'xendit' && xendit) {
+      // Xendit payment creation
+      const Invoice = xendit.Invoice;
+      paymentIntent = await Invoice.create({
+        externalID: `order_${orderId}_${Date.now()}`,
+        amount: amount,
+        payerEmail: req.user.email,
+        description: `Payment for order ${orderId}`,
+        currency: currency
+      });
+    } else if (selectedProvider === 'stripe' && stripe) {
+      // Stripe payment intent
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: currency.toLowerCase(),
+        metadata: {
+          orderId: orderId,
+          userId: req.user.id
+        }
+      });
+    } else {
+      // Fallback to mock payment for development
+      paymentIntent = {
+        id: `pi_mock_${Date.now()}`,
+        client_secret: `mock_secret_${Date.now()}`,
+        provider: 'mock',
+        amount: amount,
+        currency: currency
+      };
+    }
+
+    // Create payment record
+    const payment = await Payment.create({
+      orderId,
       amount,
       currency,
-      projectId,
-      paymentMethod,
       status: 'pending',
-      clientSecret: `pi_${Date.now()}_secret_${Math.random().toString(36).substr(2, 9)}`,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-    };
+      method: paymentMethod,
+      provider: selectedProvider,
+      transactionId: paymentIntent.id
+    });
 
     res.json({
       success: true,
-      data: paymentIntent
+      data: {
+        payment,
+        paymentIntent: {
+          id: paymentIntent.id,
+          clientSecret: paymentIntent.client_secret || paymentIntent.id,
+          provider: selectedProvider
+        }
+      },
+      message: 'Payment intent created successfully'
     });
-
   } catch (error) {
-    console.error('Payment intent creation error:', error);
+    console.error('Error creating payment intent:', error);
     res.status(500).json({
       success: false,
-      error: 'Unable to create payment intent'
+      error: 'Failed to create payment intent'
     });
   }
 });
 
-// Process payment
-router.post('/process', async (req, res) => {
+// Confirm payment
+router.post('/confirm', authenticateToken, async (req, res) => {
   try {
-    const { paymentIntentId, paymentMethod, billingDetails } = req.body;
+    const { paymentId, transactionId } = req.body;
 
-    // Validate Philippine billing details
-    if (billingDetails.country === 'PH') {
-      if (!billingDetails.tin) {
-        return res.status(400).json({
-          success: false,
-          error: 'TIN (Tax Identification Number) is required for Philippine transactions'
-        });
-      }
+    const payment = await Payment.findByPk(paymentId);
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Payment not found'
+      });
     }
 
-    // Mock payment processing
-    const payment = {
-      id: `pay_${Date.now()}`,
-      paymentIntentId,
-      amount: 85000,
-      currency: 'PHP',
-      status: 'processing',
-      paymentMethod,
-      billingDetails,
-      transactionId: `txn_${Date.now()}`,
-      provider: paymentMethod === 'gcash' || paymentMethod === 'paymaya' ? 'paymongo' : 'xendit',
-      createdAt: new Date().toISOString()
-    };
+    // Verify payment with provider
+    // This would check the actual payment status with the provider
+    payment.status = 'completed';
+    payment.paidAt = new Date();
+    await payment.save();
 
-    // Simulate processing delay
-    setTimeout(() => {
-      payment.status = 'completed';
-      payment.completedAt = new Date().toISOString();
-    }, 2000);
-
-    res.json({
-      success: true,
-      message: 'Payment processed successfully',
-      data: payment
-    });
-
-  } catch (error) {
-    console.error('Payment processing error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Payment processing failed'
-    });
-  }
-});
-
-// Get payment methods
-router.get('/methods', async (req, res) => {
-  try {
-    const { country = 'PH' } = req.query;
-
-    // Philippine payment methods
-    const philippineMethods = [
-      {
-        id: 'card',
-        name: 'Credit/Debit Card',
-        description: 'Visa, Mastercard, American Express',
-        icon: '💳',
-        fees: '2.5%',
-        processingTime: 'Instant',
-        supported: true
-      },
-      {
-        id: 'gcash',
-        name: 'GCash',
-        description: 'Mobile wallet payment',
-        icon: '📱',
-        fees: '1.5%',
-        processingTime: 'Instant',
-        supported: true
-      },
-      {
-        id: 'paymaya',
-        name: 'PayMaya',
-        description: 'Digital wallet payment',
-        icon: '📱',
-        fees: '1.5%',
-        processingTime: 'Instant',
-        supported: true
-      },
-      {
-        id: 'bank-transfer',
-        name: 'Bank Transfer',
-        description: 'Direct bank transfer',
-        icon: '🏦',
-        fees: '₱25',
-        processingTime: '1-2 business days',
-        supported: true
-      },
-      {
-        id: 'paypal',
-        name: 'PayPal',
-        description: 'International payments',
-        icon: '🌐',
-        fees: '3.5%',
-        processingTime: 'Instant',
-        supported: true
-      }
-    ];
-
-    // International payment methods
-    const internationalMethods = [
-      {
-        id: 'card',
-        name: 'Credit/Debit Card',
-        description: 'Visa, Mastercard, American Express',
-        icon: '💳',
-        fees: '2.9%',
-        processingTime: 'Instant',
-        supported: true
-      },
-      {
-        id: 'paypal',
-        name: 'PayPal',
-        description: 'International payments',
-        icon: '🌐',
-        fees: '3.5%',
-        processingTime: 'Instant',
-        supported: true
-      },
-      {
-        id: 'stripe',
-        name: 'Stripe',
-        description: 'Secure online payments',
-        icon: '🔒',
-        fees: '2.9%',
-        processingTime: 'Instant',
-        supported: true
-      }
-    ];
-
-    const methods = country === 'PH' ? philippineMethods : internationalMethods;
-
-    res.json({
-      success: true,
-      data: methods
-    });
-
-  } catch (error) {
-    console.error('Payment methods fetch error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Unable to fetch payment methods'
-    });
-  }
-});
-
-// Get payment history
-router.get('/history', async (req, res) => {
-  try {
-    const { userId, status, limit = 10, page = 1 } = req.query;
-
-    // Mock payment history
-    const payments = [
-      {
-        id: 'pay_1',
-        projectId: 'project_1',
-        projectTitle: 'Modern Condo Interior Design',
-        amount: 85000,
-        currency: 'PHP',
-        status: 'completed',
-        paymentMethod: 'gcash',
-        transactionId: 'txn_123456789',
-        paidAt: '2024-01-25T10:30:00Z',
-        createdAt: '2024-01-25T10:25:00Z'
-      },
-      {
-        id: 'pay_2',
-        projectId: 'project_2',
-        projectTitle: 'Office Renovation Project',
-        amount: 120000,
-        currency: 'PHP',
-        status: 'completed',
-        paymentMethod: 'card',
-        transactionId: 'txn_987654321',
-        paidAt: '2024-01-20T14:15:00Z',
-        createdAt: '2024-01-20T14:10:00Z'
-      },
-      {
-        id: 'pay_3',
-        projectId: 'project_3',
-        projectTitle: 'Kitchen Design',
-        amount: 65000,
-        currency: 'PHP',
-        status: 'pending',
-        paymentMethod: 'paymaya',
-        transactionId: null,
-        paidAt: null,
-        createdAt: '2024-02-01T09:00:00Z'
-      }
-    ];
-
-    // Filter by status if specified
-    let filteredPayments = payments;
-    if (status) {
-      filteredPayments = payments.filter(payment => payment.status === status);
+    // Update order status
+    const order = await Order.findByPk(payment.orderId);
+    if (order) {
+      order.paymentStatus = 'paid';
+      await order.save();
     }
 
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedPayments = filteredPayments.slice(startIndex, endIndex);
-
     res.json({
       success: true,
-      data: paginatedPayments,
-      pagination: {
-        total: filteredPayments.length,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(filteredPayments.length / limit)
-      }
+      data: payment,
+      message: 'Payment confirmed successfully'
     });
-
   } catch (error) {
-    console.error('Payment history fetch error:', error);
+    console.error('Error confirming payment:', error);
     res.status(500).json({
       success: false,
-      error: 'Unable to fetch payment history'
+      error: 'Failed to confirm payment'
     });
   }
 });
 
-// Get payment by ID
-router.get('/:id', async (req, res) => {
+// Get payment status
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
+    const payment = await Payment.findByPk(req.params.id, {
+      include: [{
+        model: Order,
+        as: 'order'
+      }]
+    });
 
-    // Mock payment data
-    const payment = {
-      id,
-      projectId: 'project_1',
-      projectTitle: 'Modern Condo Interior Design',
-      amount: 85000,
-      currency: 'PHP',
-      status: 'completed',
-      paymentMethod: 'gcash',
-      transactionId: 'txn_123456789',
-      billingDetails: {
-        name: 'Maria Santos',
-        email: 'maria@example.com',
-        phone: '+639876543210',
-        address: '123 Makati Ave, Makati City',
-        country: 'PH',
-        tin: '123-456-789-000'
-      },
-      provider: 'paymongo',
-      paidAt: '2024-01-25T10:30:00Z',
-      createdAt: '2024-01-25T10:25:00Z',
-      receipt: {
-        url: 'https://api.design2build.pro/receipts/pay_1.pdf',
-        number: 'RCP-2024-001'
-      }
-    };
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Payment not found'
+      });
+    }
 
     res.json({
       success: true,
       data: payment
     });
-
   } catch (error) {
-    console.error('Payment fetch error:', error);
+    console.error('Error fetching payment:', error);
     res.status(500).json({
       success: false,
-      error: 'Unable to fetch payment'
+      error: 'Failed to fetch payment'
     });
   }
 });
 
-// Refund payment
-router.post('/:id/refund', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { reason, amount } = req.body;
+function getProviderForMethod(method) {
+  // Default provider mapping
+  const providerMap = {
+    'gcash': 'paymongo',
+    'paymaya': 'paymongo',
+    'card': 'stripe',
+    'bank-transfer': 'xendit'
+  };
+  
+  return providerMap[method] || 'paymongo';
+}
 
-    // Mock refund processing
-    const refund = {
-      id: `ref_${Date.now()}`,
-      paymentId: id,
-      amount: amount || 85000,
-      currency: 'PHP',
-      reason,
-      status: 'processing',
-      createdAt: new Date().toISOString()
-    };
-
-    res.json({
-      success: true,
-      message: 'Refund initiated successfully',
-      data: refund
-    });
-
-  } catch (error) {
-    console.error('Refund error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Unable to process refund'
-    });
-  }
-});
-
-module.exports = router; 
+module.exports = router;

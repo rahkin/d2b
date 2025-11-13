@@ -91,15 +91,23 @@ export function Hero() {
               <span className="gradient-text-primary">Innovation</span>
             </motion.h1>
             
-            {/* Subheading */}
+            {/* Subheading with Slogan */}
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-xl md:text-2xl text-foreground-secondary mb-10 max-w-3xl mx-auto leading-relaxed"
+              className="text-xl md:text-2xl text-foreground-secondary mb-4 max-w-3xl mx-auto leading-relaxed"
             >
               Connect with designers and vendors in the Philippines. 
               AI-powered tools, project management, and marketplace solutions for the modern design industry.
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="text-lg md:text-xl font-medium text-primary-700 italic mb-10"
+            >
+              Empower the process, not just the output.
             </motion.p>
 
             {/* CTA Buttons */}

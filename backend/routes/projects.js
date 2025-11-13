@@ -1,60 +1,40 @@
 const express = require('express');
 const router = express.Router();
+const { Project, Task, User, Document, Contract } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 // Get all projects for user
-router.get('/', async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    // Mock projects data
-    const projects = [
-      {
-        id: '1',
-        title: 'Modern Condo Interior Design',
-        description: 'Contemporary interior design for a 2-bedroom condo unit in Makati',
-        clientId: 'client_1',
-        designerId: 'designer_1',
-        status: 'in-progress',
-        budget: {
-          amount: 85000,
-          currency: 'PHP'
-        },
-        timeline: {
-          startDate: '2024-01-15',
-          endDate: '2024-03-15'
-        },
-        category: 'residential',
-        tags: ['interior', 'modern', 'condo'],
-        progress: 75,
-        createdAt: '2024-01-10',
-        updatedAt: '2024-02-01'
+    // Get projects where user is client, designer, or project manager
+    const projects = await Project.findAll({
+      where: {
+        [Op.or]: [
+          { clientId: req.user.id },
+          { designerId: req.user.id },
+          { projectManagerId: req.user.id }
+        ]
       },
-      {
-        id: '2',
-        title: 'Office Renovation Project',
-        description: 'Complete office renovation for a tech startup in BGC',
-        clientId: 'client_2',
-        designerId: 'designer_1',
-        status: 'review',
-        budget: {
-          amount: 120000,
-          currency: 'PHP'
+      include: [
+        {
+          model: User,
+          as: 'client',
+          attributes: ['id', 'name', 'avatar']
         },
-        timeline: {
-          startDate: '2024-01-20',
-          endDate: '2024-04-20'
-        },
-        category: 'commercial',
-        tags: ['renovation', 'office', 'modern'],
-        progress: 90,
-        createdAt: '2024-01-15',
-        updatedAt: '2024-02-05'
-      }
-    ];
+        {
+          model: User,
+          as: 'designer',
+          attributes: ['id', 'name', 'avatar']
+        }
+      ],
+      order: [['updatedAt', 'DESC']]
+    });
 
     res.json({
       success: true,
       data: projects
     });
-
   } catch (error) {
     console.error('Projects fetch error:', error);
     res.status(500).json({
@@ -65,82 +45,50 @@ router.get('/', async (req, res) => {
 });
 
 // Get single project
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mock project data
-    const project = {
-      id,
-      title: 'Modern Condo Interior Design',
-      description: 'Contemporary interior design for a 2-bedroom condo unit in Makati',
-      clientId: 'client_1',
-      designerId: 'designer_1',
-      status: 'in-progress',
-      budget: {
-        amount: 85000,
-        currency: 'PHP'
-      },
-      timeline: {
-        startDate: '2024-01-15',
-        endDate: '2024-03-15'
-      },
-      category: 'residential',
-      tags: ['interior', 'modern', 'condo'],
-      progress: 75,
-      tasks: [
+    const project = await Project.findByPk(id, {
+      include: [
         {
-          id: 'task_1',
-          title: 'Initial Consultation',
-          description: 'Meet with client to discuss requirements',
-          status: 'completed',
-          assigneeId: 'designer_1',
-          dueDate: '2024-01-20',
-          completedAt: '2024-01-18'
+          model: User,
+          as: 'client',
+          attributes: ['id', 'name', 'avatar', 'email', 'phone']
         },
         {
-          id: 'task_2',
-          title: 'Design Concept',
-          description: 'Create initial design concept and moodboard',
-          status: 'in-progress',
-          assigneeId: 'designer_1',
-          dueDate: '2024-02-01',
-          progress: 80
+          model: User,
+          as: 'designer',
+          attributes: ['id', 'name', 'avatar', 'email', 'phone']
         },
         {
-          id: 'task_3',
-          title: 'Client Approval',
-          description: 'Present design to client for approval',
-          status: 'todo',
-          assigneeId: 'designer_1',
-          dueDate: '2024-02-15'
+          model: Task,
+          as: 'tasks'
         }
-      ],
-      files: [
-        {
-          id: 'file_1',
-          name: 'floor-plan.pdf',
-          type: 'pdf',
-          size: '2.4MB',
-          uploadedAt: '2024-01-15'
-        },
-        {
-          id: 'file_2',
-          name: 'moodboard.jpg',
-          type: 'image',
-          size: '1.8MB',
-          uploadedAt: '2024-01-20'
-        }
-      ],
-      createdAt: '2024-01-10',
-      updatedAt: '2024-02-01'
-    };
+      ]
+    });
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Check access
+    if (project.clientId !== req.user.id && 
+        project.designerId !== req.user.id && 
+        project.projectManagerId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
 
     res.json({
       success: true,
       data: project
     });
-
   } catch (error) {
     console.error('Project fetch error:', error);
     res.status(500).json({
@@ -150,39 +98,43 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create new project
-router.post('/', async (req, res) => {
+// Create project
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { title, description, budget, timeline, category, tags } = req.body;
 
-    // Mock project creation
-    const newProject = {
-      id: `project_${Date.now()}`,
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        error: 'Title is required'
+      });
+    }
+
+    const project = await Project.create({
       title,
       description,
-      clientId: 'client_1', // Would come from auth
-      designerId: null,
+      clientId: req.user.id,
       status: 'draft',
-      budget: {
-        amount: budget.amount,
-        currency: budget.currency || 'PHP'
+      budget: budget || {
+        amount: 0,
+        currency: 'PHP',
+        spent: 0,
+        allocated: {}
       },
-      timeline,
+      timeline: timeline || {
+        startDate: null,
+        endDate: null,
+        milestones: []
+      },
       category,
-      tags,
-      progress: 0,
-      tasks: [],
-      files: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+      tags: tags || []
+    });
 
     res.status(201).json({
       success: true,
-      message: 'Project created successfully',
-      data: newProject
+      data: project,
+      message: 'Project created successfully'
     });
-
   } catch (error) {
     console.error('Project creation error:', error);
     res.status(500).json({
@@ -193,24 +145,45 @@ router.post('/', async (req, res) => {
 });
 
 // Update project
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const project = await Project.findByPk(id);
 
-    // Mock project update
-    const updatedProject = {
-      id,
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Check access
+    if (project.clientId !== req.user.id && 
+        project.designerId !== req.user.id && 
+        project.projectManagerId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    const { title, description, status, budget, timeline, category, tags } = req.body;
+
+    if (title) project.title = title;
+    if (description !== undefined) project.description = description;
+    if (status) project.status = status;
+    if (budget) project.budget = budget;
+    if (timeline) project.timeline = timeline;
+    if (category) project.category = category;
+    if (tags) project.tags = tags;
+
+    await project.save();
 
     res.json({
       success: true,
-      message: 'Project updated successfully',
-      data: updatedProject
+      data: project,
+      message: 'Project updated successfully'
     });
-
   } catch (error) {
     console.error('Project update error:', error);
     res.status(500).json({
@@ -220,65 +193,43 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete project
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Mock project deletion
-    res.json({
-      success: true,
-      message: 'Project deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Project deletion error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Unable to delete project'
-    });
-  }
-});
-
 // Get project tasks
-router.get('/:id/tasks', async (req, res) => {
+router.get('/:id/tasks', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mock tasks data
-    const tasks = [
-      {
-        id: 'task_1',
-        projectId: id,
-        title: 'Initial Consultation',
-        description: 'Meet with client to discuss requirements',
-        status: 'completed',
-        priority: 'high',
-        assigneeId: 'designer_1',
-        dueDate: '2024-01-20',
-        completedAt: '2024-01-18',
-        estimatedHours: 2,
-        actualHours: 1.5
-      },
-      {
-        id: 'task_2',
-        projectId: id,
-        title: 'Design Concept',
-        description: 'Create initial design concept and moodboard',
-        status: 'in-progress',
-        priority: 'high',
-        assigneeId: 'designer_1',
-        dueDate: '2024-02-01',
-        estimatedHours: 8,
-        actualHours: 6
-      }
-    ];
+    const project = await Project.findByPk(id);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Check access
+    if (project.clientId !== req.user.id && 
+        project.designerId !== req.user.id && 
+        project.projectManagerId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    const tasks = await Task.findAll({
+      where: { projectId: id },
+      include: [{
+        model: User,
+        as: 'assignee',
+        attributes: ['id', 'name', 'avatar']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
 
     res.json({
       success: true,
       data: tasks
     });
-
   } catch (error) {
     console.error('Tasks fetch error:', error);
     res.status(500).json({
@@ -289,31 +240,45 @@ router.get('/:id/tasks', async (req, res) => {
 });
 
 // Create task
-router.post('/:id/tasks', async (req, res) => {
+router.post('/:id/tasks', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, assigneeId, dueDate, priority, estimatedHours } = req.body;
 
-    const newTask = {
-      id: `task_${Date.now()}`,
+    const project = await Project.findByPk(id);
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found'
+      });
+    }
+
+    // Check access
+    if (project.clientId !== req.user.id && 
+        project.designerId !== req.user.id && 
+        project.projectManagerId !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    const task = await Task.create({
       projectId: id,
       title,
       description,
-      status: 'todo',
-      priority: priority || 'medium',
       assigneeId,
       dueDate,
+      priority: priority || 'medium',
       estimatedHours,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+      status: 'todo'
+    });
 
     res.status(201).json({
       success: true,
-      message: 'Task created successfully',
-      data: newTask
+      data: task,
+      message: 'Task created successfully'
     });
-
   } catch (error) {
     console.error('Task creation error:', error);
     res.status(500).json({
@@ -323,4 +288,4 @@ router.post('/:id/tasks', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

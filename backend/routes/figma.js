@@ -5,6 +5,7 @@ const path = require('path');
 
 const FIGMA_EXTRACT_PATH = path.join(__dirname, '../../projectDocs/figma_extract');
 const IMAGES_PATH = path.join(FIGMA_EXTRACT_PATH, 'images');
+const LABELED_IMAGES_PATH = path.join(FIGMA_EXTRACT_PATH, 'images_labeled');
 
 // Serve Figma metadata
 router.get('/meta', async (req, res) => {
@@ -141,6 +142,83 @@ router.get('/info', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to load Figma design info'
+    });
+  }
+});
+
+// Serve labeled images with proper names
+router.get('/images-labeled/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+    const imagePath = path.join(LABELED_IMAGES_PATH, filename);
+    
+    // Check if file exists
+    try {
+      await fs.access(imagePath);
+    } catch {
+      return res.status(404).json({
+        success: false,
+        error: 'Image not found'
+      });
+    }
+    
+    // Set appropriate content type
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    
+    // Stream the file
+    const fileStream = require('fs').createReadStream(imagePath);
+    fileStream.pipe(res);
+  } catch (error) {
+    console.error('Error serving labeled Figma image:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to serve image'
+    });
+  }
+});
+
+// Get images mapping
+router.get('/images-mapping', async (req, res) => {
+  try {
+    const mappingPath = path.join(FIGMA_EXTRACT_PATH, 'images-mapping.json');
+    const mappingData = await fs.readFile(mappingPath, 'utf-8');
+    const mapping = JSON.parse(mappingData);
+    
+    res.json({
+      success: true,
+      data: mapping
+    });
+  } catch (error) {
+    console.error('Error reading images mapping:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load images mapping'
+    });
+  }
+});
+
+// List labeled images
+router.get('/images-labeled', async (req, res) => {
+  try {
+    const files = await fs.readdir(LABELED_IMAGES_PATH);
+    const imageFiles = files.filter(file => file.match(/\.(png|jpg|jpeg|webp)$/i));
+    
+    res.json({
+      success: true,
+      data: {
+        images: imageFiles.map(file => ({
+          filename: file,
+          url: `/api/figma/images-labeled/${file}`
+        })),
+        count: imageFiles.length
+      }
+    });
+  } catch (error) {
+    console.error('Error listing labeled images:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list labeled images'
     });
   }
 });

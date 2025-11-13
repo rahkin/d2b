@@ -5,6 +5,10 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config();
 
+// Initialize database
+const { sequelize, testConnection } = require('./config/database');
+const models = require('./models');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -89,6 +93,17 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/figma', figmaRoutes);
+app.use('/api/subscriptions', require('./routes/subscriptions'));
+app.use('/api/moodboards', require('./routes/moodboards'));
+app.use('/api/documents', require('./routes/documents'));
+app.use('/api/contracts', require('./routes/contracts'));
+app.use('/api/receipts', require('./routes/receipts'));
+app.use('/api/messages', require('./routes/messages'));
+app.use('/api/forum', require('./routes/forum'));
+app.use('/api/ads', require('./routes/ads'));
+
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -150,13 +165,39 @@ function getCurrencyForCountry(countryCode) {
   return currencyMap[countryCode] || 'USD';
 }
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Design2Build.Pro API server running on port ${PORT}`);
-  console.log(`🌏 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🇵🇭 Philippine market ready`);
-  console.log(`💳 Payment providers: PayMongo, Xendit`);
-  console.log(`🔒 BIR & Data Privacy Act compliant`);
-});
+// Initialize database and start server
+async function startServer() {
+  // Test database connection
+  const dbConnected = await testConnection();
+  
+  if (!dbConnected) {
+    console.log('⚠️  Starting server without database connection (will use mock data)');
+  } else {
+    // Sync database models in development
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        await sequelize.sync({ alter: false }); // Set to true if you want to auto-update schema
+        console.log('✅ Database models ready');
+      } catch (error) {
+        console.error('⚠️  Database sync warning:', error.message);
+      }
+    }
+  }
+  
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Design2Build.Pro API server running on port ${PORT}`);
+    console.log(`🌏 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🇵🇭 Philippine market ready`);
+    console.log(`💳 Payment providers: PayMongo, Xendit`);
+    console.log(`🔒 BIR & Data Privacy Act compliant`);
+  });
+
+  // Initialize Socket.IO for real-time features
+  const { initializeSocket } = require('./socket');
+  initializeSocket(server);
+  console.log('✅ Socket.IO initialized for real-time messaging');
+}
+
+startServer();
 
 module.exports = app; 

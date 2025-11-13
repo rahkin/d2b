@@ -62,12 +62,12 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="text-center w-full max-w-md">
           {/* Elegant Logo in Oval - Matches Figma Design */}
-          <motion.div
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
+        <motion.div
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
             className="mb-8 sm:mb-12"
-          >
+        >
             <div className="relative mx-auto w-48 h-48 sm:w-64 sm:h-64 flex items-center justify-center">
               {/* Oval background - light beige/cream matching Figma */}
               <div className="absolute inset-0 bg-[#f5f0eb] rounded-full shadow-soft" />
@@ -86,16 +86,16 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                   unoptimized
                 />
               </div>
-            </div>
-          </motion.div>
+          </div>
+        </motion.div>
 
           {/* Loading Dots - Subtle */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.4 }}
             className="flex justify-center gap-2 mb-6"
-          >
+        >
             {[0, 1, 2].map((i) => (
               <motion.div
                 key={i}
@@ -111,18 +111,18 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
                 }}
               />
             ))}
-          </motion.div>
+        </motion.div>
 
           {/* Philippine Flag Indicator - Subtle */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
             transition={{ duration: 0.8, delay: 0.6 }}
             className="text-foreground-secondary text-xs sm:text-sm"
-          >
-            🇵🇭 Launching in the Philippines
-          </motion.div>
-        </div>
+        >
+          🇵🇭 Launching in the Philippines
+        </motion.div>
+      </div>
       </div>
 
       {/* Footer */}
@@ -138,4 +138,4 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
       </footer>
     </div>
   );
-}
+} 

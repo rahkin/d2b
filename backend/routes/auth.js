@@ -3,16 +3,15 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const router = express.Router();
-
-// Import database models (to be created)
-// const User = require('../models/User');
+const { User, Subscription, AIPoints } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
 
 // Validation middleware
 const validateRegistration = [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
   body('name').trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
-  body('role').isIn(['client', 'designer', 'vendor', 'contractor']).withMessage('Invalid role'),
+  body('role').isIn(['client', 'designer', 'vendor', 'contractor', 'project-manager', 'student', 'diyer']).withMessage('Invalid role'),
   body('phone').optional().matches(/^\+63[0-9]{10}$/).withMessage('Invalid Philippine phone number format'),
 ];
 
@@ -37,62 +36,57 @@ router.post('/register', validateRegistration, async (req, res) => {
     const { email, password, name, role, company, phone } = req.body;
 
     // Check if user already exists
-    // const existingUser = await User.findOne({ where: { email } });
-    // if (existingUser) {
-    //   return res.status(400).json({
-    //     success: false,
-    //     error: 'User already exists'
-    //   });
-    // }
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'User already exists'
+      });
+    }
 
-    // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-    // Create user with Philippine-specific fields
-    const userData = {
+    // Create user (password is hashed in User model hook)
+    const user = await User.create({
       email,
-      password: hashedPassword,
+      password,
       name,
       role,
       company,
       phone,
-      country: 'PH',
-      currency: 'PHP',
-      isVerified: false,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      isVerified: false
+    });
 
-    // const user = await User.create(userData);
-    
-    // For now, return mock user data
-    const mockUser = {
-      id: '1',
-      email,
-      name,
-      role,
-      company,
-      phone,
-      isVerified: false,
-      createdAt: new Date()
-    };
+    // Create default freemium subscription
+    await Subscription.create({
+      userId: user.id,
+      tier: 'freemium',
+      status: 'active',
+      monthlyPrice: 0,
+      currency: 'PHP'
+    });
+
+    // Initialize AI points (10 points for freemium)
+    await AIPoints.create({
+      userId: user.id,
+      balance: 10,
+      totalEarned: 10
+    });
 
     // Generate JWT tokens
     const accessToken = jwt.sign(
-      { userId: mockUser.id, role: mockUser.role },
+      { userId: user.id, role: user.role },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '1h' }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId: mockUser.id },
-      process.env.JWT_REFRESH_SECRET || 'your-refresh-secret',
       { expiresIn: '7d' }
     );
 
+    const refreshToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_REFRESH_SECRET || 'your-refresh-secret',
+      { expiresIn: '30d' }
+    );
+
     // Remove password from response
-    const { password: _, ...userResponse } = mockUser;
+    const userResponse = user.toJSON();
+    delete userResponse.password;
 
     res.status(201).json({
       success: true,
@@ -108,10 +102,12 @@ router.post('/register', validateRegistration, async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Registration failed',
-      message: 'Unable to create user account'
+      message: error.message || 'Unable to create user account',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -131,26 +127,16 @@ router.post('/login', validateLogin, async (req, res) => {
     const { email, password } = req.body;
 
     // Find user by email
-    // const user = await User.findOne({ where: { email } });
-    // if (!user) {
-    //   return res.status(401).json({
-    //     success: false,
-    //     error: 'Invalid credentials'
-    //   });
-    // }
-
-    // Mock user for development
-    const mockUser = {
-      id: '1',
-      email,
-      name: 'John Doe',
-      role: 'designer',
-      password: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4tbQJ5qK6e', // "password123"
-      isVerified: true
-    };
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials'
+      });
+    }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, mockUser.password);
+    const isValidPassword = await user.comparePassword(password);
     if (!isValidPassword) {
       return res.status(401).json({
         success: false,
@@ -158,21 +144,26 @@ router.post('/login', validateLogin, async (req, res) => {
       });
     }
 
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
     // Generate JWT tokens
     const accessToken = jwt.sign(
-      { userId: mockUser.id, role: mockUser.role },
+      { userId: user.id, role: user.role },
       process.env.JWT_SECRET || 'your-secret-key',
-      { expiresIn: '1h' }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId: mockUser.id },
-      process.env.JWT_REFRESH_SECRET || 'your-refresh-secret',
       { expiresIn: '7d' }
     );
 
+    const refreshToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_REFRESH_SECRET || 'your-refresh-secret',
+      { expiresIn: '30d' }
+    );
+
     // Remove password from response
-    const { password: _, ...userResponse } = mockUser;
+    const userResponse = user.toJSON();
+    delete userResponse.password;
 
     res.json({
       success: true,
@@ -253,25 +244,15 @@ router.post('/logout', async (req, res) => {
 });
 
 // Get current user profile
-router.get('/profile', async (req, res) => {
+router.get('/profile', authenticateToken, async (req, res) => {
   try {
-    // This would typically use middleware to verify JWT token
-    // For now, return mock data
-    const mockUser = {
-      id: '1',
-      email: 'john@example.com',
-      name: 'John Doe',
-      role: 'designer',
-      company: 'Design Studio PH',
-      phone: '+639123456789',
-      isVerified: true,
-      createdAt: new Date()
-    };
+    const userResponse = req.user.toJSON();
+    delete userResponse.password;
 
     res.json({
       success: true,
       data: {
-        user: mockUser
+        user: userResponse
       }
     });
 
@@ -285,7 +266,7 @@ router.get('/profile', async (req, res) => {
 });
 
 // Update user profile
-router.put('/profile', async (req, res) => {
+router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const { name, company, phone } = req.body;
 
@@ -297,23 +278,22 @@ router.put('/profile', async (req, res) => {
       });
     }
 
-    // Update user profile logic here
-    const updatedUser = {
-      id: '1',
-      email: 'john@example.com',
-      name: name || 'John Doe',
-      role: 'designer',
-      company: company || 'Design Studio PH',
-      phone: phone || '+639123456789',
-      isVerified: true,
-      updatedAt: new Date()
-    };
+    // Update user profile
+    const user = req.user;
+    if (name) user.name = name;
+    if (company) user.company = company;
+    if (phone) user.phone = phone;
+    
+    await user.save();
+
+    const userResponse = user.toJSON();
+    delete userResponse.password;
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
       data: {
-        user: updatedUser
+        user: userResponse
       }
     });
 

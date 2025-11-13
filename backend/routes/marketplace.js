@@ -1,13 +1,106 @@
 const express = require('express');
 const router = express.Router();
+const { InventoryItem, User, Order } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 // Get marketplace items
 router.get('/items', async (req, res) => {
   try {
-    const { category, search, vendor, minPrice, maxPrice, sortBy = 'createdAt', order = 'desc' } = req.query;
+    const { category, search, vendor, minPrice, maxPrice, sortBy = 'createdAt', order = 'desc', page = 1, limit = 20 } = req.query;
 
-    // Mock marketplace items
-    const items = [
+    // Build query
+    const where = {
+      isAvailable: true
+    };
+
+    if (category) {
+      where.category = category;
+    }
+
+    if (vendor) {
+      where.vendorId = vendor;
+    }
+
+    if (search) {
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { description: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+
+    // Price filter
+    if (minPrice || maxPrice) {
+      // This would need a more complex query for JSONB price field
+      // For now, we'll filter in memory after fetching
+    }
+
+    // Get items from database
+    const items = await InventoryItem.findAll({
+      where,
+      include: [{
+        model: User,
+        as: 'vendor',
+        attributes: ['id', 'name', 'avatar', 'company', 'location']
+      }],
+      order: [[sortBy, order.toUpperCase()]],
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit)
+    });
+
+    // Format items for response
+    const formattedItems = items.map(item => ({
+      id: item.id,
+      vendorId: item.vendorId,
+      vendorName: item.vendor?.name || item.vendor?.company || 'Unknown Vendor',
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      price: item.price,
+      stock: item.stock,
+      images: item.images,
+      specifications: item.specifications,
+      isAvailable: item.isAvailable,
+      geotags: item.geotags,
+      vendor: item.vendor,
+      createdAt: item.createdAt
+    }));
+
+    // Apply price filters if needed (simplified - in production, use proper JSONB queries)
+    let filteredItems = formattedItems;
+    if (minPrice) {
+      filteredItems = filteredItems.filter(item => item.price.amount >= parseFloat(minPrice));
+    }
+    if (maxPrice) {
+      filteredItems = filteredItems.filter(item => item.price.amount <= parseFloat(maxPrice));
+    }
+
+    // Get total count
+    const total = await InventoryItem.count({ where });
+
+    res.json({
+      success: true,
+      data: filteredItems,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      },
+      filters: {
+        category,
+        search,
+        vendor,
+        minPrice,
+        maxPrice,
+        sortBy,
+        order
+      }
+    });
+
+    // OLD MOCK CODE - keeping for reference (commented out)
+    /*
+    const mockItems = [
       {
         id: '1',
         vendorId: 'vendor_1',
@@ -170,22 +263,8 @@ router.get('/items', async (req, res) => {
       } else {
         return aValue < bValue ? 1 : -1;
       }
-    });
-
-    res.json({
-      success: true,
-      data: filteredItems,
-      filters: {
-        category,
-        search,
-        vendor,
-        minPrice,
-        maxPrice,
-        sortBy,
-        order
-      }
-    });
-
+    };
+    */
   } catch (error) {
     console.error('Marketplace items fetch error:', error);
     res.status(500).json({
@@ -200,73 +279,25 @@ router.get('/items/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Mock item data
-    const item = {
-      id,
-      vendorId: 'vendor_1',
-      vendorName: 'Rodriguez Materials',
-      vendorRating: 4.8,
-      vendorReviews: 156,
-      name: 'Premium Marble Tiles',
-      description: 'High-quality Carrara marble tiles for flooring and walls. Perfect for modern interior designs.',
-      category: 'materials',
-      subcategory: 'tiles',
-      price: {
-        amount: 2500,
-        currency: 'PHP'
-      },
-      stock: 150,
-      unit: 'sq.m',
-      images: [
-        'https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?w=800&h=600&fit=crop',
-        'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&h=600&fit=crop'
-      ],
-      specifications: {
-        size: '60x60cm',
-        thickness: '1cm',
-        finish: 'Polished',
-        origin: 'Italy',
-        weight: '15kg/sq.m',
-        waterAbsorption: '<0.5%'
-      },
-      rating: 4.8,
-      reviews: [
-        {
-          id: '1',
-          userId: 'user_1',
-          userName: 'Maria Santos',
-          rating: 5,
-          comment: 'Excellent quality! The tiles are exactly as described.',
-          createdAt: '2024-01-20'
-        },
-        {
-          id: '2',
-          userId: 'user_2',
-          userName: 'Juan Dela Cruz',
-          rating: 4,
-          comment: 'Good product, fast delivery. Would recommend.',
-          createdAt: '2024-01-18'
-        }
-      ],
-      isAvailable: true,
-      isFeatured: true,
-      location: 'Quezon City, Philippines',
-      shipping: {
-        local: 500,
-        nationwide: 1200,
-        international: 5000
-      },
-      warranty: '1 year',
-      returnPolicy: '30 days',
-      createdAt: '2024-01-15',
-      updatedAt: '2024-02-01'
-    };
+    const item = await InventoryItem.findByPk(id, {
+      include: [{
+        model: User,
+        as: 'vendor',
+        attributes: ['id', 'name', 'avatar', 'company', 'location', 'phone', 'email']
+      }]
+    });
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        error: 'Item not found'
+      });
+    }
 
     res.json({
       success: true,
       data: item
     });
-
   } catch (error) {
     console.error('Marketplace item fetch error:', error);
     res.status(500).json({

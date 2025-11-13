@@ -1,4 +1,4 @@
-export type UserRole = 'client' | 'designer' | 'vendor' | 'contractor';
+export type UserRole = 'client' | 'designer' | 'vendor' | 'contractor' | 'project-manager' | 'student' | 'diyer';
 
 export interface User {
   id: string;
@@ -153,4 +153,77 @@ export interface LocalizationConfig {
   dateFormat: string;
   timeFormat: string;
   numberFormat: string;
+}
+
+export type SubscriptionTier = 'freemium' | 'pro' | 'pro-plus' | 'enterprise';
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  tier: SubscriptionTier;
+  status: 'active' | 'cancelled' | 'expired' | 'trial';
+  startDate: Date;
+  endDate?: Date;
+  monthlyPrice: number;
+  currency: string;
+  paymentMethod?: string;
+  autoRenew: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AIPoints {
+  id: string;
+  userId: string;
+  balance: number;
+  totalEarned: number;
+  totalUsed: number;
+  lastRefillDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Moodboard {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  images: string[];
+  colors: string[];
+  style?: string;
+  isTemplate: boolean;
+  isPublic: boolean;
+  collectionId?: string;
+  aiGenerated: boolean;
+  aiPrompt?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Contract {
+  id: string;
+  projectId: string;
+  title: string;
+  content: string;
+  status: 'draft' | 'pending' | 'approved' | 'rejected' | 'signed';
+  signedBy: string[];
+  signedAt?: Date;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Receipt {
+  id: string;
+  orderId: string;
+  receiptNumber: string;
+  tin?: string;
+  amount: number;
+  vat: number;
+  totalAmount: number;
+  currency: string;
+  isBIRCompliant: boolean;
+  pdfUrl?: string;
+  createdAt: Date;
+  updatedAt: Date;
 } 

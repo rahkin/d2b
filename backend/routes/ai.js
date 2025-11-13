@@ -1,160 +1,211 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const { AIPoints } = require('../models');
+const { authenticateToken } = require('../middleware/auth');
+const { uploadFromBuffer } = require('../utils/cloudinary');
 
-// Generate moodboard
-router.post('/moodboard', async (req, res) => {
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Generate moodboard (already in moodboards route, but keeping for compatibility)
+router.post('/moodboard', authenticateToken, async (req, res) => {
   try {
-    const { description, style, budget, roomType } = req.body;
+    const { prompt, style } = req.body;
 
-    // Mock AI processing delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Check AI points
+    const aiPoints = await AIPoints.findOne({
+      where: { userId: req.user.id }
+    });
 
-    // Generate mock moodboard data
-    const moodboard = {
-      id: `mb_${Date.now()}`,
-      description,
-      style: style || ['modern', 'minimalist'],
-      budget: budget || 50000,
-      roomType: roomType || 'living-room',
-      images: [
-        {
-          id: 'img_1',
-          url: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop',
-          description: 'Modern living room with neutral colors',
-          category: 'furniture'
-        },
-        {
-          id: 'img_2',
-          url: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=400&h=300&fit=crop',
-          description: 'Minimalist interior design',
-          category: 'interior'
-        }
+    if (!aiPoints || aiPoints.balance < 1) {
+      return res.status(403).json({
+        success: false,
+        error: 'Insufficient AI points'
+      });
+    }
+
+    // Deduct points
+    aiPoints.balance -= 1;
+    aiPoints.totalUsed += 1;
+    await aiPoints.save();
+
+    // TODO: Integrate with actual AI service
+    res.json({
+      success: true,
+      data: {
+        images: [],
+        colors: [],
+        style: style || 'modern'
+      }
+    });
+  } catch (error) {
+    console.error('Error generating moodboard:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate moodboard'
+    });
+  }
+});
+
+// Sketch to AI Render
+router.post('/sketch-to-render', authenticateToken, upload.single('sketch'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'Sketch image is required'
+      });
+    }
+
+    // Check AI points (sketch rendering costs more)
+    const aiPoints = await AIPoints.findOne({
+      where: { userId: req.user.id }
+    });
+
+    if (!aiPoints || aiPoints.balance < 3) {
+      return res.status(403).json({
+        success: false,
+        error: 'Insufficient AI points. Sketch rendering requires 3 points.'
+      });
+    }
+
+    // Upload sketch to Cloudinary
+    let sketchUrl;
+    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+      try {
+        const uploadResult = await uploadFromBuffer(req.file.buffer, {
+          folder: 'd2b/sketches',
+          resource_type: 'image'
+        });
+        sketchUrl = uploadResult.url;
+      } catch (error) {
+        console.error('Cloudinary upload failed:', error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to upload sketch'
+        });
+      }
+    } else {
+      return res.status(500).json({
+        success: false,
+        error: 'Image storage not configured'
+      });
+    }
+
+    // Deduct points
+    aiPoints.balance -= 3;
+    aiPoints.totalUsed += 3;
+    await aiPoints.save();
+
+    // TODO: Send to AI service for rendering
+    // For now, return mock render
+    const renderUrl = sketchUrl; // In production, this would be the AI-generated render
+
+    res.json({
+      success: true,
+      data: {
+        sketchUrl,
+        renderUrl,
+        style: req.body.style || 'realistic',
+        aiPointsRemaining: aiPoints.balance
+      },
+      message: 'Sketch rendered successfully'
+    });
+  } catch (error) {
+    console.error('Error rendering sketch:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to render sketch'
+    });
+  }
+});
+
+// AI Analyzer (suggest tools, layouts)
+router.post('/analyze', authenticateToken, async (req, res) => {
+  try {
+    const { projectId, type, data } = req.body;
+
+    // Check AI points
+    const aiPoints = await AIPoints.findOne({
+      where: { userId: req.user.id }
+    });
+
+    if (!aiPoints || aiPoints.balance < 1) {
+      return res.status(403).json({
+        success: false,
+        error: 'Insufficient AI points'
+      });
+    }
+
+    // Deduct point
+    aiPoints.balance -= 1;
+    aiPoints.totalUsed += 1;
+    await aiPoints.save();
+
+    // TODO: Integrate with AI analysis service
+    // Mock analysis
+    const analysis = {
+      suggestions: [
+        'Consider using moodboard creator for this project',
+        'Budget tracker can help manage expenses',
+        'Gantt chart recommended for timeline visualization'
       ],
-      colorPalette: [
-        { name: 'Warm White', hex: '#F5F5DC', usage: 'Walls' },
-        { name: 'Charcoal', hex: '#36454F', usage: 'Accent' },
-        { name: 'Sage Green', hex: '#9CAF88', usage: 'Decor' }
-      ],
-      materials: [
-        { name: 'Natural Wood', description: 'Oak or walnut for furniture', price: '₱2,500/sq.m' },
-        { name: 'Marble', description: 'Carrara marble for countertops', price: '₱8,000/sq.m' }
-      ],
+      tools: ['moodboard', 'budget-tracker', 'gantt-chart'],
       estimatedBudget: {
-        total: budget || 50000,
-        breakdown: {
-          furniture: 25000,
-          materials: 15000,
-          labor: 8000,
-          accessories: 2000
+        min: 50000,
+        max: 150000,
+        currency: 'PHP'
+      }
+    };
+
+    res.json({
+      success: true,
+      data: analysis,
+      aiPointsRemaining: aiPoints.balance
+    });
+  } catch (error) {
+    console.error('Error analyzing:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze'
+    });
+  }
+});
+
+// Get AI usage stats
+router.get('/stats', authenticateToken, async (req, res) => {
+  try {
+    const aiPoints = await AIPoints.findOne({
+      where: { userId: req.user.id }
+    });
+
+    if (!aiPoints) {
+      return res.json({
+        success: true,
+        data: {
+          balance: 0,
+          totalEarned: 0,
+          totalUsed: 0
         }
-      },
-      createdAt: new Date(),
-      status: 'completed'
-    };
+      });
+    }
 
     res.json({
       success: true,
-      message: 'Moodboard generated successfully',
       data: {
-        moodboard,
-        processingTime: '2.3s',
-        aiModel: 'Design2Build-AI-v1.0'
+        balance: aiPoints.balance,
+        totalEarned: aiPoints.totalEarned,
+        totalUsed: aiPoints.totalUsed,
+        lastRefillDate: aiPoints.lastRefillDate
       }
     });
-
   } catch (error) {
-    console.error('Moodboard generation error:', error);
+    console.error('Error fetching AI stats:', error);
     res.status(500).json({
       success: false,
-      error: 'Moodboard generation failed'
+      error: 'Failed to fetch AI stats'
     });
   }
 });
 
-// Render sketch
-router.post('/render', async (req, res) => {
-  try {
-    const { image, style, resolution, lighting } = req.body;
-
-    // Mock AI processing delay
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    // Generate mock render data
-    const render = {
-      id: `render_${Date.now()}`,
-      originalImage: image,
-      style,
-      resolution: resolution || 'hd',
-      lighting: lighting || 'natural',
-      result: {
-        url: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800&h=600&fit=crop',
-        width: 1920,
-        height: 1080,
-        format: 'jpeg',
-        size: '2.4MB'
-      },
-      metadata: {
-        processingTime: '3.1s',
-        aiModel: 'Sketch2Render-v2.1',
-        enhancements: ['lighting', 'texture', 'perspective']
-      },
-      createdAt: new Date(),
-      status: 'completed'
-    };
-
-    res.json({
-      success: true,
-      message: 'Sketch rendered successfully',
-      data: {
-        render,
-        downloadUrl: render.result.url,
-        thumbnailUrl: render.result.url.replace('w=800&h=600', 'w=400&h=300')
-      }
-    });
-
-  } catch (error) {
-    console.error('Sketch rendering error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Sketch rendering failed'
-    });
-  }
-});
-
-// Get AI tool usage statistics
-router.get('/stats', async (req, res) => {
-  try {
-    const stats = {
-      totalRequests: 1247,
-      todayRequests: 23,
-      popularTools: [
-        { name: 'Moodboard Creator', usage: 456, successRate: 98.5 },
-        { name: 'Sketch Renderer', usage: 389, successRate: 95.2 }
-      ],
-      averageProcessingTime: {
-        moodboard: '2.3s',
-        render: '3.1s'
-      },
-      regionalUsage: {
-        'PH': 85,
-        'US': 8,
-        'SG': 4,
-        'Other': 3
-      }
-    };
-
-    res.json({
-      success: true,
-      data: stats
-    });
-
-  } catch (error) {
-    console.error('Stats error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Unable to fetch statistics'
-    });
-  }
-});
-
-module.exports = router; 
+module.exports = router;
